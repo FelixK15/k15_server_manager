@@ -5,7 +5,7 @@ setlocal enableextensions enabledelayedexpansion
 set PROJECT_NAME=k15_server_manager
 set C_FILE_NAME=k15_server_manager.cpp
 
-set COMPILER_OPTIONS=/nologo /Od /FC /TP /MTd /W3 /Od /Gm- /Z7 /I../k15_std/src /I../k15_std/include /Fe!PROJECT_NAME!.exe
+set COMPILER_OPTIONS=/nologo /Od /FC /TP /MTd /W3 /Od /Gm- /Z7 /Fe!PROJECT_NAME!.exe
 set LINKER_OPTIONS=/PDB:!PROJECT_NAME!.pdb
 
 set CL_OPTIONS=!COMPILER_OPTIONS! /link !LINKER_OPTIONS!

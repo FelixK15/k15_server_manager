@@ -7,8 +7,16 @@
 #include <windows.h>
 #include <stdio.h>
 
-#include "k15_base.hpp"
+#include "k15_std/include/k15_base.hpp"
 #include "k15_html_server.hpp"
+
+#include "k15_std/src/k15_memory.cpp"
+//#include "k15_std/src/k15_format.cpp"
+#include "k15_std/src/k15_profiling.cpp"
+#include "k15_std/src/k15_time.cpp"
+#include "k15_std/src/k15_string.cpp"
+#include "k15_std/src/k15_platform_win32.cpp"
+#include "k15_std/src/k15_profiling_win32.cpp"
 
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "user32.lib")
@@ -199,7 +207,7 @@ int CALLBACK WinMain(HINSTANCE hInstance,
 		return -1;
 	}
 
-	html_server* pServer = initResult.value;
+	html_server* pServer = initResult.getValue();
 	return serveHtmlClients( pServer );
 
 	return 0;

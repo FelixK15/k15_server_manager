@@ -2,7 +2,8 @@
 #define K15_HTML_SERVER_INCLUDE
 
 #include <malloc.h>
-#include "k15_container.hpp"
+#include "k15_std/include/k15_container.hpp"
+#include "k15_std/include/k15_memory.hpp"
 
 namespace k15
 {
@@ -143,55 +144,37 @@ namespace k15
 
             if (bytesRead == -1)
             {
-                return errorId::socketError;
+                return error_id::socket_error;
             }
             else if (bytesRead == 0)
             {
                 pMessageBuffer->pushBack('\0');
-                return resultId::ok;
+                return error_id::success;
             }
 
             char* pMessage = pMessageBuffer->pushBackRange(bytesRead);
             if (pMessage == nullptr)
             {
-                return resultId::outOfMemory;
+                return error_id::out_of_memory;
             }
 
-            copyMemoryNonOverlapping(pMessage, buffer, bytesRead);
+            copyMemoryNonOverlapping(pMessage, bytesRead, buffer, bytesRead);
 
             if (bytesRead < sizeof(buffer))
             {
                 pMessageBuffer->pushBack('\0');
-                return resultId::ok;
+                return error_id::success;
             }
         }
 
-        return resultId::ok;
+        return error_id::success;
+
     }
-
-#if 1
-    bool compareStringNonCaseSensitive( const char* pStringA, uint32 stringALength, const char* pStringB )
-    {
-        if (stringALength == 0u)
-        {
-            return false;
-        }
-
-        for( uint32 charIndex = 0u; charIndex < stringALength; ++charIndex )
-        {
-            if (tolower(pStringA[charIndex]) != tolower(pStringB[charIndex]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-#endif
 
     result<html_request> parseHtmlRequest(slice< char >* pMessageBuffer)
     {
-        char* pMessage = pMessageBuffer->pBuffer;
+        const char* pMessage = pMessageBuffer->getStart();
+        const char* pMessageEnd = pMessageBuffer->getEnd();
 
         enum class parse_state
         {
@@ -202,6 +185,7 @@ namespace k15
         };
 
         html_request request;
+        K15_UNUSED_VARIABLE(request);
 
         uint32 tokenStartIndex  = 0u;
         uint32 tokenLength      = 0u;
@@ -214,64 +198,17 @@ namespace k15
                 break;
             }
 
-            if( pMessage == pMessageBuffer->pBuffer + pMessageBuffer->size)
+            if( pMessage == pMessageEnd )
             { 
-                return resultId::htmlParseError;
-            }
-            
-            switch( state )
-            {
-                case parse_state::method:
-                {
-                    if( compareStringNonCaseSensitive( pMessage, 3u, "get" ) )
-                    {
-                        request.method = request_method::Get;
-                        state = parse_state::pathBegin;
-                        pMessage += 3u;
-                    }
-                    else if( compareStringNonCaseSensitive( pMessage, 4u, "post"))
-                    {
-                        request.method = request_method::Post;
-                        state = parse_state::pathBegin;
-                        pMessage += 4u;
-                    }
-                    else
-                    {
-                        ++pMessage;
-                    }
-                    break;
-                }
-                case parse_state::pathBegin:
-                {
-                    if( isWhiteSpace(*pMessage))
-                    {
-                        ++pMessage;
-                        continue;
-                    }
-
-                    request.pPath = pMessage++;
-                    state = parse_state::pathEnd;
-                    break;
-                }
-                case parse_state::pathEnd:
-                {
-                    if( isWhiteSpace(*pMessage))
-                    {
-                        ++pMessage;
-                        continue;
-                    }
-
-                    *pMessage = 0;
-                    state = parse_state::finished;
-                    break;
-                }
+                return error_id::parse_error;
             }
         }
 
-        return request;
+        //FK: TODO return result
+        return error_id::success;
     }
 
-    result<html_request> readClientRequest(html_client* pClient)
+    result< html_request > readClientRequest(html_client* pClient)
     {
         //html_request request;
         //dynamic_array< char, 256u > messageBuffer;
@@ -279,7 +216,7 @@ namespace k15
         const result< void > receiveResult = receiveClientData(&messageBuffer, pClient);
         if (receiveResult.hasError())
         {
-            return receiveResult.error;
+            return receiveResult.getError();
         }
 
        return parseHtmlRequest( &messageBuffer );
@@ -294,12 +231,12 @@ namespace k15
 
 	    if (pServer->ipv4Socket == INVALID_SOCKET && pServer->ipv6Socket == INVALID_SOCKET)
 	    {
-	    	return resultId::socketError;	
+	    	return error_id::socket_error;	
 	    }
 
 	    if (!listenOnSocket(pServer->ipv4Socket, AF_INET, parameters.port, parameters.ipv4BindAddress) && ! listenOnSocket(pServer->ipv4Socket, AF_INET6, parameters.port, parameters.ipv6BindAddress) )
         {
-            return resultId::listenError;
+            return error_id::listen_error;
         }
 
         return pServer;
@@ -316,7 +253,8 @@ namespace k15
             }
 
             const result<html_request> requestResult = readClientRequest(pClient);
-            const html_request& request = requestResult.value;
+            const html_request& request = requestResult.getValue();
+            K15_UNUSED_VARIABLE(request);
         }
     }
 }
