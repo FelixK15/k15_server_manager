@@ -1,0 +1,3 @@
+[submodule "k15_std"]
+	path = k15_std
+	url = ../k15_std.git
