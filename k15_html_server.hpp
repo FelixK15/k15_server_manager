@@ -23,14 +23,16 @@ namespace k15
 
     enum class request_method
     {
-        Get,
-        Post
+        get,
+        post,
+        put,
+        delete
     };
 
     struct html_request
     {
         request_method  method;
-        const char*     pPath;
+        string_view     path;
     };
 
 	struct html_server_parameters
@@ -95,7 +97,7 @@ namespace k15
         return pClient;
     }
 
-    bool isWhiteSpace(char rune)
+    bool isAsciiWhiteSpace(char rune)
     {
         return (rune == ' ' || rune == '/t' || rune == '/r' || rune == '/n');
     }
@@ -173,14 +175,13 @@ namespace k15
 
     result<html_request> parseHtmlRequest(slice< char >* pMessageBuffer)
     {
-        const char* pMessage = pMessageBuffer->getStart();
+        const char* pMessageRunningPtr = pMessageBuffer->getStart();
         const char* pMessageEnd = pMessageBuffer->getEnd();
 
         enum class parse_state
         {
             method,
-            pathBegin,
-            pathEnd,
+            path,
             finished
         };
 
@@ -193,19 +194,71 @@ namespace k15
 
         while( true )
         {
-            if( state == parse_state::finished )
-            {
-                break;
-            }
-
-            if( pMessage == pMessageEnd )
+            if( pMessageRunningPtr == pMessageEnd )
             { 
                 return error_id::parse_error;
             }
+
+            switch( state )
+            {
+                case parse_state::finished:
+                {
+                    return request;
+                }
+
+                case parse_state::method:
+                {
+                    if( compareStringNonCaseSensitive( pMessageRunningPtr, "get" ) )
+                    {
+                        request.method = request_method::get;
+                        state = parse_state::path;
+                    }
+                    else if (compareStringNonCaseSensitive( pMessageRunningPtr, "post" ) )
+                    {
+                        request.method = request_method::post;
+                        state = parse_state::path;
+                    }
+                    else if( compareStringNonCaseSensitive( pMessageRunningPtr, "put" ) )
+                    {
+                        request.method = request_method::put;
+                        state = parse_state::path;
+                    }
+                    else if( compareStringNonCaseSensitive( pMessageRunningPtr, "delete" ) )
+                    {
+                        request.method = request_method::delete;
+                        state = parse_state::path;
+                    }
+                    else
+                    {
+                        return error_id::not_supported;
+                    }
+
+                    pMessageRunningPtr = findNextAsciiWhiteSpace( pMessageRunningPtr );
+                    
+                    break;
+                }
+          
+                case parse_state::path:
+                {
+                    const char* pPathBegin = pMessageRunningPtr;
+                    const char* pPathEnd = pPathBegin;
+
+                    while( isAsciiWhiteSpace( *pPathEnd++ ) )
+                    {
+                        if( pPathEnd >= pMessageEnd )
+                        {
+                            return error_id::parse_error;
+                        }
+                    }
+
+                    request.path = string_view( pPathBegin, pPathEnd - pPathBegin );
+                    state = parse_state::finished;
+                    break;
+                }
+            }
         }
 
-        //FK: TODO return result
-        return error_id::success;
+        return request;
     }
 
     result< html_request > readClientRequest(html_client* pClient)
