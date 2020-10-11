@@ -26,7 +26,7 @@ namespace k15
         get,
         post,
         put,
-        delete
+        del
     };
 
     struct html_request
@@ -97,11 +97,6 @@ namespace k15
         return pClient;
     }
 
-    bool isAsciiWhiteSpace(char rune)
-    {
-        return (rune == ' ' || rune == '/t' || rune == '/r' || rune == '/n');
-    }
-
     void parseClientRequest(html_request* pRequest, const char* pMessageBuffer, int messageBufferLength)
     {
         //FK: Add state machine
@@ -112,7 +107,7 @@ namespace k15
             const char messageBufferChar = pMessageBuffer[ charIndex ];
 
             //FK: eat whitespace
-            if( isWhiteSpace( messageBufferChar ) )
+            if( isAsciiWhiteSpace( messageBufferChar ) )
             {
                 continue;
             }
@@ -129,7 +124,7 @@ namespace k15
             else
             {
                 const char nextMessageBufferChar = pMessageBuffer[ charIndex + 1 ];
-                if( isWhiteSpace( nextMessageBufferChar ) )
+                if( isAsciiWhiteSpace( nextMessageBufferChar ) )
                 {
 
                 }
@@ -225,7 +220,7 @@ namespace k15
                     }
                     else if( compareStringNonCaseSensitive( pMessageRunningPtr, "delete" ) )
                     {
-                        request.method = request_method::delete;
+                        request.method = request_method::del;
                         state = parse_state::path;
                     }
                     else
@@ -233,7 +228,7 @@ namespace k15
                         return error_id::not_supported;
                     }
 
-                    pMessageRunningPtr = findNextAsciiWhiteSpace( pMessageRunningPtr );
+                    pMessageRunningPtr = getAfterNextAsciiWhiteSpace( pMessageRunningPtr );
                     
                     break;
                 }
