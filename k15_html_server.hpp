@@ -1,7 +1,6 @@
 #ifndef K15_HTML_SERVER_INCLUDE
 #define K15_HTML_SERVER_INCLUDE
 
-#include <malloc.h>
 #include "k15_std/include/k15_container.hpp"
 #include "k15_std/include/k15_memory.hpp"
 #include "k15_std/include/k15_bitmask.hpp"
@@ -23,6 +22,7 @@ namespace k15
         memory_allocator* pAllocator;
         socketId          ipv4Socket;
         socketId          ipv6Socket;
+        string_view       rootDirectory;
         int               port;
 
         html_server_flags flags;
@@ -53,8 +53,9 @@ namespace k15
     {
         memory_allocator* pAllocator;
         int               port;
-        const char*       ipv4BindAddress;
-        const char*       ipv6BindAddress;
+        const char*       pIpv4BindAddress;
+        const char*       pIpv6BindAddress;
+        const char*       pRootDirectory;
         bool              onlyServeBelowRoot; //FK: Don't allow paths like ../file.txt
     };
 
@@ -266,13 +267,15 @@ namespace k15
     result< html_server* > createHtmlServer( const html_server_parameters& parameters )
     {
         K15_ASSERT( parameters.pAllocator != nullptr );
+        K15_ASSERT( parameters.pRootDirectory != nullptr );
         memory_allocator* pAllocator = parameters.pAllocator;
 
-        html_server* pServer = newObject< html_server >( pAllocator );
-        pServer->ipv4Socket  = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
-        pServer->ipv6Socket  = socket( AF_INET6, SOCK_STREAM, IPPROTO_TCP );
-        pServer->port        = parameters.port;
-        pServer->pAllocator  = pAllocator;
+        html_server* pServer   = newObject< html_server >( pAllocator );
+        pServer->ipv4Socket    = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
+        pServer->ipv6Socket    = socket( AF_INET6, SOCK_STREAM, IPPROTO_TCP );
+        pServer->rootDirectory = parameters.pRootDirectory;
+        pServer->port          = parameters.port;
+        pServer->pAllocator    = pAllocator;
 
         if ( pServer->ipv4Socket == INVALID_SOCKET && pServer->ipv6Socket == INVALID_SOCKET )
         {
@@ -280,7 +283,7 @@ namespace k15
             return error_id::socket_error;
         }
 
-        if ( !listenOnSocket( pServer->ipv4Socket, AF_INET, parameters.port, parameters.ipv4BindAddress ) && !listenOnSocket( pServer->ipv4Socket, AF_INET6, parameters.port, parameters.ipv6BindAddress ) )
+        if ( !listenOnSocket( pServer->ipv4Socket, AF_INET, parameters.port, parameters.pIpv4BindAddress ) && !listenOnSocket( pServer->ipv6Socket, AF_INET6, parameters.port, parameters.pIpv6BindAddress ) )
         {
             destroyHtmlServer( pServer );
             return error_id::listen_error;
@@ -308,11 +311,22 @@ namespace k15
             {
             case request_method::get:
                 {
-                    path servePath( request.path );
-                    //FK: Serve file
-                    if ( pServer->flags.isFlagSet( html_server_flag::only_serve_below_root ) )
+                    path servePath( pServer->pAllocator );
+                    servePath.setRoot( pServer->rootDirectory );
+                    servePath.setRelativePath( request.path );
+
+                    if ( servePath.isDirectory() && !findIndexFile( &servePath ) )
                     {
+                        return false;
                     }
+
+                    if ( !fileExists( servePath ) )
+                    {
+                        return false;
+                    }
+
+                    sendFileContentToClient( pClient, servePath );
+
                     break;
                 }
             }

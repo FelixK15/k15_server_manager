@@ -189,11 +189,15 @@ int CALLBACK WinMain( HINSTANCE hInstance,
         return -1;
     }
 
+    char currentDirectory[ MAX_PATH ];
+    GetCurrentDirectoryA( MAX_PATH, currentDirectory );
+
     html_server_parameters parameters;
-    parameters.port            = 9090;
-    parameters.ipv4BindAddress = "0.0.0.0";
-    parameters.ipv6BindAddress = "::0";
-    parameters.pAllocator      = getCrtMemoryAllocator();
+    parameters.port             = 9090;
+    parameters.pIpv4BindAddress = "0.0.0.0";
+    parameters.pIpv6BindAddress = "::0";
+    parameters.pAllocator       = getCrtMemoryAllocator();
+    parameters.pRootDirectory   = currentDirectory;
 
     result< html_server* > initResult = createHtmlServer( parameters );
     if ( initResult.hasError() )
