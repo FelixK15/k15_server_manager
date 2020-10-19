@@ -18,6 +18,7 @@
 #include "k15_std/src/k15_path.cpp"
 #include "k15_std/src/k15_platform_win32.cpp"
 #include "k15_std/src/k15_profiling_win32.cpp"
+#include "k15_std/src/k15_path_win32.cpp"
 
 #pragma comment( lib, "kernel32.lib" )
 #pragma comment( lib, "user32.lib" )

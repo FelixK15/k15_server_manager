@@ -302,6 +302,29 @@ namespace k15
         return pServer;
     }
 
+    result< string_view > findIndexFileInDirectory( memory_allocator* pAllocator, const string_view& servePath )
+    {
+        const static string_view indexFiles[] = {
+            "index.html",
+            "index.htm" };
+
+        path indexFilePath( pAllocator );
+        for ( size_t indexFileIndex = 0u; indexFileIndex < K15_ARRAY_SIZE( indexFiles ); ++indexFileIndex )
+        {
+            if ( !indexFilePath.setCombinedPath( servePath, indexFiles[ indexFileIndex ] ) )
+            {
+                return error_id::out_of_memory;
+            }
+
+            if ( doesFileExist( indexFilePath ) )
+            {
+                return indexFilePath;
+            }
+        }
+
+        return error_id::not_found;
+    }
+
     bool serveHtmlClients( html_server* pServer )
     {
         while ( true )
@@ -321,15 +344,16 @@ namespace k15
                 {
                     path servePath( pServer->pAllocator );
                     servePath.setCombinedPath( pServer->rootDirectory, request.path );
-#if 0
+
                     if ( servePath.isDirectory() )
                     {
-                        const result< string_view > indexFilePathResult = findIndexFileInDirectory( servePath );
+                        const result< string_view > indexFilePathResult = findIndexFileInDirectory( pServer->pAllocator, servePath );
                         if ( indexFilePathResult.hasError() )
                         {
                             return false;
                         }
 
+#if 0
                         path.setAbsolutePath( indexFilePathResult.getValue() );
                     }
 
@@ -341,11 +365,11 @@ namespace k15
                     sendFileContentToClient( pClient, servePath );
 #endif
 
-                    break;
+                        break;
+                    }
                 }
             }
         }
-    }
-} // namespace k15
+    } // namespace k15
 
 #endif //K15_HTML_SERVER_INCLUDE
