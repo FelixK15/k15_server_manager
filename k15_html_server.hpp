@@ -42,11 +42,15 @@ namespace k15
         del
     };
 
+    enum : uint8
+    {
+        HtmlRequestPathLength = 128
+    };
+
     struct html_request
     {
         request_method method;
-        string_view    path;
-        slice< char >  message;
+        char           path[ HtmlRequestPathLength ];
     };
 
     struct html_server_parameters
@@ -152,6 +156,8 @@ namespace k15
 
     result< html_request > parseHtmlRequest( slice< char >* pMessageBuffer )
     {
+        html_request request;
+
         const char* pMessageRunningPtr = pMessageBuffer->getStart();
         const char* pMessageEnd        = pMessageBuffer->getEnd();
 
@@ -162,8 +168,7 @@ namespace k15
             finished
         };
 
-        html_request request;
-        parse_state  state = parse_state::method;
+        parse_state state = parse_state::method;
 
         while ( true )
         {
@@ -221,14 +226,17 @@ namespace k15
                         return error_id::parse_error;
                     }
 
-                    request.path = string_view( pPathBegin, pPathEnd );
-                    state        = parse_state::finished;
+                    const size_t pathLength = pPathEnd - pPathBegin;
+                    K15_ASSERT( pathLength < HtmlRequestPathLength );
+
+                    copyMemoryNonOverlapping( request.path, HtmlRequestPathLength, pPathBegin, pathLength );
+                    request.path[ pathLength ] = 0;
+
+                    state = parse_state::finished;
                     break;
                 }
             }
         }
-
-        request.message.swapFrom( pMessageBuffer );
 
         return request;
     }
@@ -312,20 +320,26 @@ namespace k15
             case request_method::get:
                 {
                     path servePath( pServer->pAllocator );
-                    servePath.setRoot( pServer->rootDirectory );
-                    servePath.setRelativePath( request.path );
-
-                    if ( servePath.isDirectory() && !findIndexFile( &servePath ) )
+                    servePath.setCombinedPath( pServer->rootDirectory, request.path );
+#if 0
+                    if ( servePath.isDirectory() )
                     {
-                        return false;
+                        const result< string_view > indexFilePathResult = findIndexFileInDirectory( servePath );
+                        if ( indexFilePathResult.hasError() )
+                        {
+                            return false;
+                        }
+
+                        path.setAbsolutePath( indexFilePathResult.getValue() );
                     }
 
-                    if ( !fileExists( servePath ) )
+                    if ( !doesFileExist( servePath ) )
                     {
                         return false;
                     }
 
                     sendFileContentToClient( pClient, servePath );
+#endif
 
                     break;
                 }
