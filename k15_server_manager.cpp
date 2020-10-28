@@ -16,6 +16,7 @@
 #include "k15_std/src/k15_time.cpp"
 #include "k15_std/src/k15_string.cpp"
 #include "k15_std/src/k15_path.cpp"
+#include "k15_std/src/k15_io.cpp"
 #include "k15_std/src/k15_platform_win32.cpp"
 #include "k15_std/src/k15_profiling_win32.cpp"
 #include "k15_std/src/k15_path_win32.cpp"
@@ -198,7 +199,7 @@ int CALLBACK WinMain( HINSTANCE hInstance,
     parameters.pIpv4BindAddress = "0.0.0.0";
     parameters.pIpv6BindAddress = "::0";
     parameters.pAllocator       = getCrtMemoryAllocator();
-    parameters.pRootDirectory   = currentDirectory;
+    parameters.pRootDirectory   = "H:\\repos\\k15_server_manager\\html";
 
     result< html_server* > initResult = createHtmlServer( parameters );
     if ( initResult.hasError() )

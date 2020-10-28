@@ -5,6 +5,7 @@
 #include "k15_std/include/k15_memory.hpp"
 #include "k15_std/include/k15_bitmask.hpp"
 #include "k15_std/include/k15_path.hpp"
+#include "k15_std/include/k15_io.hpp"
 
 namespace k15
 {
@@ -40,6 +41,13 @@ namespace k15
         post,
         put,
         del
+    };
+
+    enum class http_status_code
+    {
+        ok,
+        not_found,
+        bad_request
     };
 
     enum : uint8
@@ -302,13 +310,16 @@ namespace k15
         return pServer;
     }
 
-    result< string_view > findIndexFileInDirectory( memory_allocator* pAllocator, const string_view& servePath )
+    result< void > findIndexFileInDirectory( path* pTarget, memory_allocator* pAllocator, const string_view& servePath )
     {
+        K15_ASSERT( pTarget != nullptr );
+
         const static string_view indexFiles[] = {
             "index.html",
             "index.htm" };
 
         path indexFilePath( pAllocator );
+
         for ( size_t indexFileIndex = 0u; indexFileIndex < K15_ARRAY_SIZE( indexFiles ); ++indexFileIndex )
         {
             if ( !indexFilePath.setCombinedPath( servePath, indexFiles[ indexFileIndex ] ) )
@@ -318,11 +329,125 @@ namespace k15
 
             if ( doesFileExist( indexFilePath ) )
             {
-                return indexFilePath;
+                *pTarget = indexFilePath;
+                return error_id::success;
             }
+
+            indexFilePath.clear();
         }
 
         return error_id::not_found;
+    }
+
+    result< void > sendToClient( html_client* pClient, const array_view< char >& content )
+    {
+        WSASetLastError( 0u );
+        const int bytesSend = send( pClient->socket, ( const char* )content.getStart(), content.getSize(), 0u );
+        if ( bytesSend != SOCKET_ERROR )
+        {
+            return error_id::success;
+        }
+
+        const int wsaError = WSAGetLastError();
+        K15_UNUSED_VARIABLE( wsaError );
+        K15_NOT_IMPLEMENTED;
+
+        return error_id::generic;
+    }
+
+    result< void > sendToClient( html_client* pClient, char character )
+    {
+        WSASetLastError( 0u );
+        const int bytesSend = send( pClient->socket, &character, 1u, 0u );
+        if ( bytesSend != SOCKET_ERROR )
+        {
+            return error_id::success;
+        }
+
+        const int wsaError = WSAGetLastError();
+        K15_UNUSED_VARIABLE( wsaError );
+        K15_NOT_IMPLEMENTED;
+
+        return error_id::generic;
+    }
+
+    result< void > sendStatusCodeToClient( html_client* pClient, http_status_code statusCode )
+    {
+        switch ( statusCode )
+        {
+        case http_status_code::ok:
+            {
+                const char message[] = {
+                    "HTTP/1.1 200 OK\n"
+                    "Content-Type: text/html\n"
+                    "Connection: close\n\n" };
+
+                return sendToClient( pClient, createArrayView( message ) );
+            }
+        case http_status_code::not_found:
+            {
+                const char message[] = {
+                    "HTTP/1.1 404 Not Found\n" };
+
+                return sendToClient( pClient, createArrayView( message ) );
+            }
+        case http_status_code::bad_request:
+            {
+                const char message[] = {
+                    "HTTP/1.1 400 Bad Request\n" };
+
+                return sendToClient( pClient, createArrayView( message ) );
+            }
+        }
+        return error_id::not_found;
+    }
+
+    result< void > sendFileContentToClient( html_client* pClient, const string_view& filePath )
+    {
+        file_handle_scope fileScope( filePath, file_access_mask( file_access::read ) );
+        if ( fileScope.hasError() )
+        {
+            return fileScope.getError();
+        }
+
+        dynamic_array< char > fileContentBuffer;
+        if ( !fileContentBuffer.create( pClient->pAllocator, K15_MiB( 1 ) ) )
+        {
+            return error_id::out_of_memory;
+        }
+
+        const file_handle requestedFileHandle = fileScope.getHandle();
+        size_t            fileOffsetInBytes   = 0u;
+        while ( true )
+        {
+            const result< size_t > readResult = readFromFile( requestedFileHandle, fileOffsetInBytes, &fileContentBuffer, fileContentBuffer.getCapacity() );
+            if ( readResult.hasError() )
+            {
+                return readResult.getError();
+            }
+
+            const size_t bytesRead = readResult.getValue();
+            fileOffsetInBytes += bytesRead;
+
+            const result< void > sendResult = sendToClient( pClient, fileContentBuffer );
+            if ( sendResult.hasError() )
+            {
+                return sendResult;
+            }
+
+            if ( bytesRead != fileContentBuffer.getCapacity() )
+            {
+                break;
+            }
+        }
+
+        return sendToClient( pClient, "\0\n" );
+    }
+
+    void closeClientConnection( html_server* pServer, html_client* pClient )
+    {
+        closesocket( pClient->socket );
+        deleteObject( pClient, pServer->pAllocator );
     }
 
     bool serveHtmlClients( html_server* pServer )
@@ -336,8 +461,14 @@ namespace k15
             }
 
             const result< html_request > requestResult = readClientRequest( pClient );
-            const html_request&          request       = requestResult.getValue();
+            if ( requestResult.hasError() )
+            {
+                sendStatusCodeToClient( pClient, http_status_code::bad_request );
+                closeClientConnection( pServer, pClient );
+                continue;
+            }
 
+            const html_request& request = requestResult.getValue();
             switch ( request.method )
             {
             case request_method::get:
@@ -347,29 +478,32 @@ namespace k15
 
                     if ( servePath.isDirectory() )
                     {
-                        const result< string_view > indexFilePathResult = findIndexFileInDirectory( pServer->pAllocator, servePath );
+                        const result< void > indexFilePathResult = findIndexFileInDirectory( &servePath, pServer->pAllocator, servePath );
                         if ( indexFilePathResult.hasError() )
                         {
                             return false;
                         }
-
-#if 0
-                        path.setAbsolutePath( indexFilePathResult.getValue() );
                     }
 
                     if ( !doesFileExist( servePath ) )
                     {
-                        return false;
+                        sendStatusCodeToClient( pClient, http_status_code::not_found );
+                    }
+                    else
+                    {
+                        const result< void > statusCodeResult = sendStatusCodeToClient( pClient, http_status_code::ok );
+                        if ( statusCodeResult.isOk() )
+                        {
+                            sendFileContentToClient( pClient, servePath );
+                        }
                     }
 
-                    sendFileContentToClient( pClient, servePath );
-#endif
-
-                        break;
-                    }
+                    closeClientConnection( pServer, pClient );
+                    break;
                 }
             }
         }
-    } // namespace k15
+    }
+} // namespace k15
 
 #endif //K15_HTML_SERVER_INCLUDE
