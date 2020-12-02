@@ -199,7 +199,8 @@ int CALLBACK WinMain( HINSTANCE hInstance,
     parameters.pIpv4BindAddress = "0.0.0.0";
     parameters.pIpv6BindAddress = "::0";
     parameters.pAllocator       = getCrtMemoryAllocator();
-    parameters.pRootDirectory   = "H:\\repos\\k15_server_manager\\html";
+    parameters.pRootDirectory   = "html/";
+    parameters.pLogFilePath     = "html_log.txt";
 
     result< html_server* > initResult = createHtmlServer( parameters );
     if ( initResult.hasError() )

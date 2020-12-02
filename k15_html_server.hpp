@@ -23,6 +23,7 @@ namespace k15
         memory_allocator* pAllocator;
         socketId          ipv4Socket;
         socketId          ipv6Socket;
+        file_handle       logFileHandle;
         string_view       rootDirectory;
         int               port;
 
@@ -68,6 +69,7 @@ namespace k15
         const char*       pIpv4BindAddress;
         const char*       pIpv6BindAddress;
         const char*       pRootDirectory;
+        const char*       pLogFilePath;
         bool              onlyServeBelowRoot; //FK: Don't allow paths like ../file.txt
     };
 
@@ -284,6 +286,17 @@ namespace k15
     {
         K15_ASSERT( parameters.pAllocator != nullptr );
         K15_ASSERT( parameters.pRootDirectory != nullptr );
+
+        file_handle logFileHandle = file_handle::invalid;
+        if ( parameters.pLogFilePath != nullptr )
+        {
+            const result< file_handle > openLogFileResult = openFile( parameters.pLogFilePath, file_access::write, file_open_flag::clear_existing );
+            if ( openLogFileResult.isOk() )
+            {
+                logFileHandle = openLogFileResult.getValue();
+            }
+        }
+
         memory_allocator* pAllocator = parameters.pAllocator;
 
         html_server* pServer   = newObject< html_server >( pAllocator );
@@ -292,6 +305,7 @@ namespace k15
         pServer->rootDirectory = parameters.pRootDirectory;
         pServer->port          = parameters.port;
         pServer->pAllocator    = pAllocator;
+        pServer->logFileHandle = logFileHandle;
 
         if ( pServer->ipv4Socket == INVALID_SOCKET && pServer->ipv6Socket == INVALID_SOCKET )
         {
